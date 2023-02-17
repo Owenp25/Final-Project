@@ -1,0 +1,704 @@
+---
+title: "ProjectDraft"
+author: "Cam Lunn, Atticus Patrick, & Owen Patrick"
+date: "4/18/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+|  Name     |       Description                     |    Levels                   |
+|:---------:|    :-----------------------------:    |  :------------------------: |
+|   Age     |        Age of the patient             |       28 yrs - 77 yrs       |
+|   Sex     |        Sex of the patient             |       Male, Female          |
+|   exang   |        exercise induced angina        |       (1 = yes; 0 = no)     |
+|   caa     |        number of major vessels        |       (0-3)                 |
+|   cp      |        Chest Pain type chest pain type|       Value 1: typical angina   [TA] |
+|           |                                       |       Value 2: atypical angina  [ATA]|
+|           |                                       |       Value 3: non-anginal pain [NAP]|
+|           |                                       |       Value 4: asymptomatic     [ASY]|
+|   trtbps  |     resting blood pressure (in mm Hg) |       0 - 200 mm Hg                       |
+|   chol    |   cholestoral in mg/dl fetched via BMI sensor |   0-603 mg/dl                     |
+|   fbs     |        (fasting blood sugar > 120 mg/dl) |        (1 = true; 0 = false)      |   
+|   rest_ecg|        resting electrocardiographic results   |  Value 0: normal              |
+|           |                                       |          Value 1: having ST-T wave abnormality (T wave inversions and/or ST elevation or  | |           |                                       |          depression of > 0.05 mV)                                                         |
+|           |                                       |     Value 2: showing probable or definite left ventricular hypertrophy by Estes'  criteria |
+|   thalach |       maximum heart rate achieved     |       60 - 202 bpm                              |
+|   target  |        chance of a heart attack       |       0= less chance of heart attack; 1= more chance of heart attack |                                                           
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+HEART2: https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(tidyverse, rstatix, class,
+               rpart, rpart.plot, dplyr, corrplot, MASS, caret, MVN, 
+               factoextra, psych)
+source("Partial F Test function.R")
+
+heart2 <- read.csv("heart2.csv")
+
+# ----------------------- Data for Classifying Heart Disease -----------------------
+
+heart <- heart2  %>% 
+    mutate(Age = if_else(Age >= 28 & Age <= 37,
+                         "28-37",
+                         if_else(Age >= 38 & Age <= 47, 
+                                 "38-47",
+                         if_else(Age >= 48 & Age <= 57, 
+                                 "48-57", 
+                         if_else(Age >= 58 & Age <= 67, 
+                                 "58-67",
+                         if_else(Age >= 68 & Age <= 77, 
+                                 "68-77", "Not seen"))))), 
+           HeartDisease = if_else(HeartDisease == "0",
+                       "Unaffected",
+                       "Affected") %>% factor())
+
+# ----------------------- Data for Classifying Chest Pain ---------------------- 
+
+heart_CP <- heart2  %>% 
+    mutate(Age = if_else(Age >= 28 & Age <= 37,
+                         "28-37",
+                         if_else(Age >= 38 & Age <= 47, 
+                                 "38-47",
+                         if_else(Age >= 48 & Age <= 57, 
+                                 "48-57", 
+                         if_else(Age >= 58 & Age <= 67, 
+                                 "58-67",
+                         if_else(Age >= 68 & Age <= 77, 
+                                 "68-77", "Not seen"))))),
+           ChestPainType = factor(ChestPainType,
+                      levels = c("TA", "ATA", "NAP", "ASY")))
+
+# Need to edit this?
+
+N <- nrow(heart); p <- ncol(heart %>%dplyr::select(where(is.numeric)));
+
+# number of groups in ChestPainType, k_pain.
+k_pain <- n_distinct(heart$ChestPainType)
+# number of groups in age, k_age
+k_age <- n_distinct(heart$Age)
+# number of groups in Heart Disease, k_HD
+k_HD <- n_distinct(heart$HeartDisease)
+
+
+```
+
+
+```{r Exploratory}
+# Combined 5 datasets (Cleveland, Long Beach, Switzerland, Hungarian, & Stalog)
+skimr::skim(heart)
+
+R <- cor(heart %>%dplyr::select(where(is.numeric)))
+
+corrplot(R, 
+        method="shade", 
+        type="upper", 
+        addCoef.col = "yellow")
+
+heart %>% 
+  pivot_longer(cols = c(RestingBP, Cholesterol, Oldpeak, MaxHR),
+               names_to = "attribute",
+               values_to = "value") %>% 
+  
+  ggplot(mapping = aes(x = value,
+                       fill = ChestPainType)) + 
+  geom_boxplot() + 
+  facet_wrap(facets = ~ attribute,
+             scales = "free") +
+  labs(fill = "ChestPainType") +
+  theme(legend.position = "top")
+
+heart %>% 
+  pivot_longer(cols = c(RestingBP, Cholesterol, Oldpeak, MaxHR),
+               names_to = "attribute",
+               values_to = "value") %>% 
+  
+  ggplot(mapping = aes(x = value,
+                       fill = HeartDisease)) + 
+  geom_density(alpha = .5) + 
+  facet_wrap(facets = ~ attribute,
+             scales = "free") +
+  labs(fill = "HeartDisease") +
+  theme(legend.position = "top")
+
+table(heart$Sex)
+
+```
+
+## Check some group means
+```{r Group Means, warning=FALSE}
+
+HD_means <-
+  heart %>% 
+  group_by(HeartDisease, Age) %>% 
+  summarize(across(.cols = c(Cholesterol, Oldpeak, MaxHR),
+                   .fns = mean))
+view(HD_means)
+
+```
+
+## PCA to Check Significance of Variables 
+```{r PCA}
+
+(heart_R_PCA <- prcomp(heart %>% dplyr::select(where(is.numeric)),
+                      scale. = T))
+summary(heart_R_PCA)
+
+
+fviz_screeplot(X = heart_R_PCA,
+               choice = "eigenvalue",
+               geom = "line",
+               linecolor = "steelblue",
+               ncp = p) + 
+  
+  labs(title = "Screeplot using the Covariance Matrix",
+       x = "Principal Component") + 
+  
+  geom_hline(yintercept = 1,
+             color = "darkred")
+
+
+```
+
+#### 2c: Correlation Matrix PCA Biplot
+
+```{r 2c_biplot}
+
+fviz_pca(X = heart_R_PCA,
+         axes = c(1, 2),              # Which PCs to plot
+         geom = c("point"), 
+         alpha.ind = .1, 
+         repel = T)  +   # text adds name of country.
+
+  coord_equal()
+
+
+```
+
+
+## Check Differences Using MANOVA
+
+
+```{r Manova CHEST PAIN, echo=FALSE}
+
+# heart_man <- manova(cbind(RestingBP, Cholesterol, MaxHR, Oldpeak) ~ Age,
+#                   data = heart)
+# summary(heart_man)
+
+heart_man <- manova(cbind(RestingBP, Cholesterol, FastingBS, MaxHR, Oldpeak, HeartDisease) ~ ChestPainType,
+    data = heart)
+
+summary(heart_man)
+
+```
+
+## Check Assumptions
+
+```{r Assumptions, echo=FALSE}
+# Not normal
+mvn(data = heart_man$residuals, 
+    desc = F, 
+    multivariatePlot = "qq",
+    univariateTest = "SW",
+    mvnTest = "mardia")
+
+box_m(data =  heart[, c(4, 5, 6, 8, 10)],
+      group = heart$ChestPainType)
+
+```
+
+## Let's see what's actually useful:
+
+```{r}
+Partial_F(Y = heart_CP %>%
+              dplyr::select(where(is.numeric)),
+          x = heart_CP$ChestPainType)
+
+Partial_F(Y = heart_CP %>% 
+              dplyr::select(FastingBS, RestingBP, Cholesterol, Oldpeak, MaxHR, HeartDisease), 
+          x = heart_CP$ChestPainType)
+
+heart_man <- manova(cbind(FastingBS, RestingBP, Cholesterol, Oldpeak, MaxHR, HeartDisease) ~ ChestPainType,
+    data = heart_CP)
+
+summary(heart_man)
+# ------------------------------------------ # 
+Partial_F(Y = heart_CP %>% 
+              dplyr::select(RestingBP, Cholesterol, Oldpeak, MaxHR, HeartDisease), 
+          x = heart_CP$ChestPainType)
+
+heart_man <- manova(cbind(RestingBP, Cholesterol, Oldpeak, MaxHR, HeartDisease) ~ ChestPainType,
+    data = heart_CP)
+
+summary(heart_man)
+
+# ------------------------------------------ # 
+
+Partial_F(Y = heart_CP %>% 
+              dplyr::select(Cholesterol, Oldpeak, MaxHR, HeartDisease), 
+          x = heart_CP$ChestPainType)
+
+heart_man <- manova(cbind(Cholesterol, Oldpeak, MaxHR, HeartDisease) ~ ChestPainType,
+    data = heart_CP)
+
+summary(heart_man)
+
+# ------------------------------------------ # 
+
+
+
+Partial_F(Y = heart_CP %>% 
+              dplyr::select(Oldpeak, MaxHR, HeartDisease), 
+          x = heart_CP$ChestPainType)
+
+heart_man <- manova(cbind(Oldpeak, MaxHR, HeartDisease) ~ ChestPainType,
+    data = heart_CP)
+
+summary(heart_man)
+
+# ------------------------------------------ # 
+
+
+Partial_F(Y = heart_CP %>% 
+              dplyr::select(MaxHR, HeartDisease), 
+          x = heart_CP$ChestPainType)
+
+heart_man <- manova(cbind(MaxHR, HeartDisease) ~ ChestPainType,
+    data = heart_CP)
+
+summary(heart_man)
+
+
+# ------------------------------------------ # 
+
+# --------------CHECKING HEART DISEASE AS OUTCOME ------------------# 
+
+# ------------------------------------------ # 
+Partial_F(Y = heart %>% 
+              dplyr::select(RestingBP, Cholesterol, Oldpeak, MaxHR), 
+          x = heart$HeartDisease)
+
+heart_man <- manova(cbind(RestingBP, Cholesterol, Oldpeak, MaxHR) ~ HeartDisease,
+    data = heart)
+
+summary(heart_man)
+
+# ------------------------------------------ # 
+Partial_F(Y = heart %>% 
+              dplyr::select(Cholesterol, Oldpeak, MaxHR), 
+          x = heart$HeartDisease)
+
+heart_man <- manova(cbind(Cholesterol, Oldpeak, MaxHR) ~ HeartDisease,
+    data = heart)
+
+summary(heart_man)
+
+# Stratify by ChestPain Type:
+heart_man <- manova(cbind(Cholesterol, Oldpeak, MaxHR) ~ ChestPainType + HeartDisease,
+    data = heart)
+
+summary(heart_man)
+
+#Age, Sex, RestingBP, Cholesterol, FastingBS, RestingECG, MaxHR, ExerciseAngina, Oldpeak, ST_Slope, HeartDisease
+```
+
+
+```{r Linear Discriminate, echo=FALSE}
+# ------------ Plot the discriminant for HEART DISEASE ------------------
+
+heart_HD_lda <- MASS::lda(HeartDisease ~ cbind(Cholesterol, Oldpeak, MaxHR),
+                     data = heart)
+
+ld_sep_pct <- round(heart_HD_lda$svd^2/sum(heart_HD_lda$svd^2)*100,
+                    digits = 1)
+
+heart_HD <- 
+  data.frame(heart, 
+             predict(heart_HD_lda)$x)
+
+gg_lda_density <-
+  heart_HD %>%
+  ggplot(mapping = aes(x = LD1,
+                       fill = HeartDisease)) +
+
+  theme(legend.position = "bottom") +
+
+  labs(x = paste0("LD1 (Percent Explained: ", ld_sep_pct[1], "%)"),
+       y = paste0("LD2 (Percent Explained: ", ld_sep_pct[2], "%)"))
+
+gg_lda_density +
+  geom_density(alpha = .5)
+
+# ------------------ Plot Discrimant for CHEST PAIN -------------------- 
+heart_CP_lda <- MASS::lda(ChestPainType ~ cbind(Oldpeak, MaxHR, HeartDisease),
+                     data = heart_CP)
+
+ld_sep_pct <- round(heart_CP_lda$svd^2/sum(heart_CP_lda$svd^2)*100,
+                    digits = 1)
+
+heart_CPLDA <-
+  data.frame(heart_CP, 
+             predict(heart_CP_lda)$x)
+
+gg_lda_scatter_CP <-
+  heart_CPLDA %>%
+  ggplot(mapping = aes(x = LD1,
+                       y = LD2,
+                       color = ChestPainType)) +
+
+  theme(legend.position = "bottom") +
+
+  labs(x = paste0("LD1 (Percent Explained: ", ld_sep_pct[1], "%)"),
+       y = paste0("LD2 (Percent Explained: ", ld_sep_pct[2], "%)"))
+
+gg_lda_scatter_CP +
+  geom_point()
+
+```
+
+# QDA Predicting for Heart Disease Outcome
+
+```{r Assumptions HEART DISEASE, echo=FALSE}
+# Using best model:
+heart_man_HD <- manova(cbind(Cholesterol, Oldpeak, MaxHR) ~ HeartDisease,
+    data = heart)
+
+
+# Not normal
+mvn(data = heart_man$residuals, 
+    desc = F, 
+    multivariatePlot = "qq",
+    univariateTest = "SW",
+    mvnTest = "mardia")
+
+box_m(data =  heart[, c("Cholesterol", "Oldpeak", "MaxHR")],
+      group = heart$HeartDisease)
+
+```
+
+```{r QDA Heart Disease, echo=FALSE}
+# Not normal and reject box_m test: 
+qda_heart_HD_cv <- MASS::qda(formula = HeartDisease~ cbind(Cholesterol, Oldpeak, MaxHR), 
+                      data = heart, 
+                      CV = T)
+
+# Confusion Matrix
+table(predicted = qda_heart_HD_cv$class, 
+      actual = heart$HeartDisease) %>% 
+  confusionMatrix()
+
+```
+
+```{r Standardize HD}
+# Find the pooled standard deviations:
+sd_heart_HD <- 
+  summary(heart_man)$SS$Residuals %>%  
+  diag() %>% 
+  sqrt()/sqrt(N-k_HD)
+
+
+
+# Standardize the data using the pooled standard deviations:
+
+
+# Now we need to divide each variable by the pooled sd:
+heart_sc_HD <- 
+  scale(heart[, c("Cholesterol", "Oldpeak", "MaxHR")],
+        center = T, 
+        scale = sd_heart_HD) %>% 
+  data.frame()
+
+
+heart_sc_HD$HeartDisease <- heart$HeartDisease
+
+```
+
+
+
+```{r QDA CHEST PAIN, echo=FALSE}
+# Not normal
+qda_heart_CP_cv <- MASS::qda(formula = ChestPainType ~ cbind(Oldpeak, MaxHR, HeartDisease), 
+                      data = heart_CP, 
+                      CV = T)
+
+# Confusion Matrix
+table(predicted = qda_heart_CP_cv$class, 
+      actual = heart_CP$ChestPainType) %>% 
+  confusionMatrix()
+
+```
+
+```{r Standardize CHEST PAIN}
+# Make Manova model:
+
+heart_man_CP <- manova(cbind(Oldpeak, MaxHR, HeartDisease) ~ ChestPainType,
+    data = heart_CP)
+
+# Find the pooled standard deviations:
+sd_heart_CP <- 
+  summary(heart_man_CP)$SS$Residuals %>%  
+  diag() %>% 
+  sqrt()/sqrt(N-k_pain)
+
+
+
+# Standardize the data using the pooled standard deviations:
+
+typeof(heart_CP$HeartDisease)
+# Now we need to divide each variable by the pooled sd:
+heart_sc_CP <- 
+  scale(heart_CP[, c("Oldpeak", "MaxHR", "HeartDisease")],
+        center = T, 
+        scale = sd_heart_CP) %>% 
+  data.frame()
+
+heart_sc_CP$ChestPainType <- heart_CP$ChestPainType
+
+```
+
+```{r 1eii_kChoice}
+## Creating a loop to find the best choice for k
+RNGversion("4.0.0")
+set.seed(123)
+# ---------------------- CHEST PAIN ---------------------- #
+sqrt(N/k_pain)
+k_choice <-5:27
+
+# data.frame to store the predictions for different choices of k
+knn_predictions <- data.frame(Actual = heart_CP$ChestPainType)
+
+
+# Function knn.cv() performs KNN using cross-validation
+# and returns the predicted class based on the nearest neighbors.
+
+# Looping through the different choices of k for knn
+for (i in k_choice){
+
+  knn_temp <- class::knn.cv(train = heart_sc_CP %>% dplyr::select(-ChestPainType),
+                            cl = heart_sc_CP$ChestPainType,
+                            k = i)
+
+  # adding the predicted column to the data set
+  knn_predictions <-
+    knn_predictions %>%
+    add_column(knn_temp)
+}
+
+# Changing the column names to better describe the results
+colnames(knn_predictions) <- c('Actual', paste0("k", k_choice))
+
+# Calculating the error rate for each choice of k:
+knn_predictions %>%
+  pivot_longer(cols = starts_with("k"),
+               names_to = "k_choice",
+               values_to = "prediction") %>%
+  group_by(k_choice) %>%
+  summarize(incorrect = sum(Actual != prediction),
+            positive_rate = mean(Actual == prediction)) %>%
+  mutate(k = parse_number(k_choice)) %>%
+
+  ggplot(mapping = aes(x = k,
+                       y = positive_rate)) +
+  geom_line(color = "darkred",
+            size = 1) +
+
+  labs(x = "Choice of k",
+       y = "Correct Prediction Percentage") +
+
+  scale_x_continuous(breaks = k_choice) +
+  scale_y_continuous(labels = scales::percent)
+
+# k = 15?
+
+# ---------------------- HEART DISEASE ----------------------- #
+sqrt(N/k_HD)
+k_choice <-11:33
+
+# data.frame to store the predictions for different choices of k
+knn_predictions <- data.frame(Actual = heart$HeartDisease)
+
+
+# Function knn.cv() performs KNN using cross-validation
+# and returns the predicted class based on the nearest neighbors.
+
+# Looping through the different choices of k for knn
+for (i in k_choice){
+  
+  knn_temp <- class::knn.cv(train = heart_sc_HD %>% dplyr::select(-HeartDisease), 
+                            cl = heart_sc_HD$HeartDisease, 
+                            k = i)
+  
+  # adding the predicted column to the data set
+  knn_predictions <- 
+    knn_predictions %>% 
+    add_column(knn_temp)
+}
+
+# Changing the column names to better describe the results
+colnames(knn_predictions) <- c('Actual', paste0("k", k_choice))
+
+# Calculating the error rate for each choice of k:
+knn_predictions %>% 
+  pivot_longer(cols = starts_with("k"),
+               names_to = "k_choice",
+               values_to = "prediction") %>% 
+  group_by(k_choice) %>% 
+  summarize(incorrect = sum(Actual != prediction),
+            positive_rate = mean(Actual == prediction)) %>% 
+  mutate(k = parse_number(k_choice)) %>% 
+  
+  ggplot(mapping = aes(x = k,
+                       y = positive_rate)) +
+  geom_line(color = "darkred",
+            size = 1) + 
+  
+  labs(x = "Choice of k",
+       y = "Correct Prediction Percentage") +
+  
+  scale_x_continuous(breaks = k_choice) +
+  scale_y_continuous(labels = scales::percent)
+
+# k = 19?
+
+
+```
+
+
+```{r 1eii_kNNCM}
+# ---------------------- CHEST PAIN ---------------------- # 
+# # Best choice of kNN model
+heart_knn <- knn.cv(train = heart_sc_CP%>% dplyr::select(-ChestPainType),
+                          cl = heart_sc_CP$ChestPainType,
+                          k = 15)
+
+# Confusion matrix
+data.frame(actual = heart_CP$ChestPainType,
+           predicted = heart_knn) %>%
+  table() %>%
+  confusionMatrix()
+
+
+# ---------------------- HEART DISEASE ---------------------- #
+
+# Best choice of kNN model
+heart_knn <- knn.cv(train = heart_sc_HD %>% dplyr::select(-HeartDisease), 
+                          cl = heart_sc_HD$HeartDisease, 
+                          k = 19)
+
+# Confusion matrix 
+data.frame(actual = heart$HeartDisease, 
+           predicted = heart_knn) %>%
+  table() %>%
+  confusionMatrix()
+
+
+
+```
+
+
+```{r Tree CHEST PAIN, message=FALSE}
+# Include the two lines below at the top of the R code to ensure your answer matches the solutions
+RNGversion("4.0.0")
+set.seed(123)
+typeof(heart_CP$HeartDisease)
+
+# Create the full classification tree
+heart_tree_CP <- rpart(ChestPainType ~ ., 
+                   data = heart_CP, 
+                   minsplit = 2, 
+                   minbucket = 1, 
+                   cp = -1,
+                   method = "class")
+rpart.plot(heart_tree_CP, type=5)
+
+
+# Looking at the cp table to find the optimal pruning value:
+# simplest tree where xerror < min(xerror) + min(xstd)
+printcp(heart_tree_CP)
+plotcp(heart_tree_CP)
+
+```
+
+```{r CHEST PAIN Prune Tree}
+# Prune the tree
+
+p_heart_tree_CP<- prune(heart_tree_CP, cp= 0.046)
+
+
+# Plot the pruned tree
+
+rpart.plot(p_heart_tree_CP, 
+           type=5, 
+           extra = 101)
+
+
+# Display the confusion matrix
+pheart_tree_pred <- predict(object = p_heart_tree_CP,
+                         newdata = heart_CP, 
+                         type = 'class')
+
+data.frame(actual = heart_CP$ChestPainType, 
+           predicted = pheart_tree_pred) %>%
+  table() %>%
+  confusionMatrix()
+
+```
+
+
+``` {r HEART DISEASE Tree}
+
+# Include the two lines below at the top of the R code to ensure your answer matches the solutions
+RNGversion("4.0.0")
+set.seed(123)
+
+
+# Create the full classification tree
+heart_tree2 <- rpart(HeartDisease ~ .,
+                   data = heart,
+                   minsplit = 2,
+                   minbucket = 1,
+                   cp = -1,
+                   method = "class")
+rpart.plot(heart_tree2, type=5)
+
+
+# Looking at the cp table to find the optimal pruning value:
+# simplest tree where xerror < min(xerror) + min(xstd)
+printcp(heart_tree2)
+plotcp(heart_tree2)
+
+
+
+# Prune the tree
+
+p_heart_tree2<- prune(heart_tree2, cp= 0.0182927)
+
+
+# Plot the pruned tree
+
+rpart.plot(p_heart_tree2,
+           type=5,
+           extra = 101)
+
+
+# Display the confusion matrix
+pheart_tree_pred2 <- predict(object = p_heart_tree2,
+                         newdata = heart,
+                         type = 'class')
+
+data.frame(actual = heart$HeartDisease,
+           predicted = pheart_tree_pred2) %>%
+  table() %>%
+  confusionMatrix()
+
+
+```
+
+
+
