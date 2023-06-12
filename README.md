@@ -26,9 +26,28 @@ c) Decision Tree
 
 ![corr](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/corr%20plot.png)
 
+Variances of the numeric variables: RestingBP - 342.7739 Cholesterol - 11964.89 MaxHR - 648.2286 Oldpeak
+- 1.137572 As shown by the correlation plot above of the numeric variables in our data set, there does not 
+- appear to be any high correlations between variables.
 
 ![box](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/Chest%20Pain%20boxplots.png)
 
+Above is a set of box plots showing the distribution of the four chest pain types in each of the 5 numeric
+variables in our data set. The chest pain types appear relatively equal across Cholesterol and RestingBP,
+5 while MaxHR is noticeably lower for those with ASY, and both ASY and TA are noticeably higher in Oldpeak.
+
 ![density](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/Heart%20Disease%20Density%20plots.png)
 
+Also shown above is a set of density plots showing the distribution of those affected or unaffected by heart
+disease in each of the 5 numeric variables in our data set. It appears that MaxHR has a higher median
+for those without heart disease when compared to those with heart disease. It appears that Oldpeak and
+RestingBP have slightly higher medians for those with heart disease when compared to those without heart
+disease. Cholesterol level appears to be relatively equal between the two.
+
 ![biplot](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/PCA%20biplot.png)
+
+We used PCA to check variable dependencies, as well as significance of the variables. To no surprise, PCA
+wasn’t super useful because there wasn’t much collinearity between the numeric variables (as shown in the
+correlation matrix). This is shown in the screeplot, because the first two PC’s only account for around 55%,
+and ff of the PC’s would get us to ~88% of the proportion covered. The biplot also shows this because the
+direction of the vector’s do not overlap - they point in mostly different directions.
