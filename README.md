@@ -28,3 +28,5 @@ c) Decision Tree
 
 
 ![box](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/Chest%20Pain%20boxplots.png)
+
+![density](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/Heart%20Disease%20Density%20plots.png)
