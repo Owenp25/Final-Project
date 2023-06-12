@@ -26,9 +26,8 @@ c) Decision Tree
 
 ![corr](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/corr%20plot.png)
 
-Variances of the numeric variables: RestingBP - 342.7739 Cholesterol - 11964.89 MaxHR - 648.2286 Oldpeak
-- 1.137572 As shown by the correlation plot above of the numeric variables in our data set, there does not 
-- appear to be any high correlations between variables.
+Variances of the numeric variables: RestingBP - 342.7739 Cholesterol - 11964.89 MaxHR - 648.2286 Oldpeak 1.137572 
+As shown by the correlation plot above of the numeric variables in our data set, there does not appear to be any high correlations between variables.
 
 ![box](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/Chest%20Pain%20boxplots.png)
 
