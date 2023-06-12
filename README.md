@@ -24,4 +24,4 @@ c) Decision Tree
 
 ## EDA
 
-
+![corr](corr plot.png)
