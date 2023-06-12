@@ -50,3 +50,5 @@ wasn’t super useful because there wasn’t much collinearity between the numer
 correlation matrix). This is shown in the screeplot, because the first two PC’s only account for around 55%,
 and ff of the PC’s would get us to ~88% of the proportion covered. The biplot also shows this because the
 direction of the vector’s do not overlap - they point in mostly different directions.
+
+Predictive Modeling, Limitations, and Conclusions are in the full report included in the repository: "HeartDiseasePredictionReport.pdf".
