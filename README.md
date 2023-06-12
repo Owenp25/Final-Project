@@ -24,4 +24,4 @@ c) Decision Tree
 
 ## EDA
 
-![corr](corr plot.png)
+![corr](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/corr%20plot.png)
