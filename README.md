@@ -25,3 +25,6 @@ c) Decision Tree
 ## EDA
 
 ![corr](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/corr%20plot.png)
+
+
+![box](https://github.com/Owenp25/Predicting-Heart-Disease-and-Chest-Pain-Type-Project/blob/master/Chest%20Pain%20boxplots.png)
